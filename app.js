@@ -7,7 +7,7 @@ app.use(express.json());
 
 app.use('/api/ai', aiRoutes);
 
-app.get('/', (req, res) => {
+app.get('/',  (req, res) => {
     res.send('Celine AI Assistant Server is Running!');
 });
 
