@@ -4,7 +4,7 @@ const aiRoutes = require('./routes/aiRoutes');
 
 app.use(express.json());
 
-// Main Routes
+
 app.use('/api/ai', aiRoutes);
 
 app.get('/', (req, res) => {
