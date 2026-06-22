@@ -15,3 +15,6 @@ const PORT = 5000;
 app.listen(PORT, () => {
     console.log(`Server is live on port ${PORT}`);
 });
+process.on('unhandledRejection', (reason, promise) => {
+    console.log('Unhandled Rejection at:', promise, 'reason:', reason);
+});
