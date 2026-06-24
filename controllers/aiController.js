@@ -1,4 +1,6 @@
 const { OpenAI } = require('openai');
+const { db } = require('../config/firebaseConfig');
+const emailService = require('../services/emailService'); // Day 6: Email Service import
 require('dotenv').config();
 
 // AI Initialization with Safety Check
@@ -8,11 +10,14 @@ const isRealKey = process.env.OPENAI_API_KEY &&
 
 const openai = isRealKey ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
-// --- 1. AI Aftercare Assistant (Requirement 51) ---
+// --- 1. AI Aftercare Assistant (Requirement 51 + Email + DB Save) ---
 exports.getAftercare = async (req, res) => {
     try {
-        const { serviceType, language = "en" } = req.body;
+        const { serviceType, language = "en", clientName, clientEmail } = req.body;
 
+        let responseData;
+
+        // AI Logic
         if (openai) {
             const langName = language === 'fr' ? 'French' : 'English';
             const completion = await openai.chat.completions.create({
@@ -23,24 +28,41 @@ exports.getAftercare = async (req, res) => {
                 ],
                 response_format: { type: "json_object" }
             });
-            return res.status(200).json({ success: true, data: JSON.parse(completion.choices[0].message.content) });
+            responseData = JSON.parse(completion.choices[0].message.content);
+        } else {
+            // Mock Database for 6 Services
+            const salonDatabase = {
+                "en": {
+                    "Japanese Head Spa": { "instructions": ["Relax for the day", "Do not wash hair for 24h"], "products": ["Scalp Serum"], "luxuryTip": "Drink water." },
+                    "Nail care": { "instructions": ["Avoid hot water", "Use oil"], "products": ["Celine Nail Oil"], "luxuryTip": "Don't peel the gel." }
+                },
+                "fr": {
+                    "Japanese Head Spa": { "instructions": ["Détendez-vous", "Ne pas laver pendant 24h"], "products": ["Sérum apaisant"], "luxuryTip": "Buvez de l'eau." }
+                }
+            };
+            const langData = salonDatabase[language] || salonDatabase["en"];
+            responseData = langData[serviceType] || { instructions: ["General care"], products: ["Basic Kit"], luxuryTip: "Stay glowing!" };
         }
 
-        const salonDatabase = {
-            "en": {
-                "Japanese Head Spa": { "instructions": ["Relax for the day", "Do not wash hair for 24h"], "products": ["Scalp Serum"] },
-                "Nail care": { "instructions": ["Avoid hot water for 24h", "Use oil"], "products": ["Celine Nail Oil"] },
-                "Eyelash extensions": { "instructions": ["Keep dry for 24h"], "products": ["Lash Cleanser"] }
-            },
-            "fr": {
-                "Japanese Head Spa": { "instructions": ["Détendez-vous", "Ne pas laver pendant 24h"], "products": ["Sérum apaisant"] }
-            }
+        // --- Day 6: SAVE TO FIRESTORE ---
+        const aftercareRecord = {
+            clientName: clientName || "Valued Client",
+            clientEmail: clientEmail || "no-email",
+            serviceType,
+            instructions: responseData.instructions,
+            luxuryTip: responseData.luxuryTip,
+            status: "active",
+            createdAt: new Date()
         };
+        await db.collection('client_aftercare').add(aftercareRecord);
 
-        const langData = salonDatabase[language] || salonDatabase["en"];
-        const response = langData[serviceType] || { instructions: ["General care"], products: ["Basic Kit"] };
+        // --- Day 6: SEND EMAIL ---
+        if (clientEmail && clientEmail !== "no-email") {
+            const emailContent = `<ul>${responseData.instructions.map(i => `<li>${i}</li>`).join('')}</ul>`;
+            await emailService.sendLuxuryEmail(clientEmail, `Celine Aftercare: ${serviceType}`, clientName, emailContent, responseData.luxuryTip);
+        }
 
-        res.status(200).json({ success: true, mode: "Mock Mode", service: serviceType, ...response });
+        res.status(200).json({ success: true, message: "Aftercare processed, saved and emailed!", ...responseData });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -55,19 +77,13 @@ exports.analyzeSentiment = async (req, res) => {
                 model: "gpt-3.5-turbo",
                 messages: [{ 
                     role: "system", 
-                    content: "Analyze sentiment and write a luxury response for Celine Esthetique. JSON { sentiment, response }" 
+                    content: "Analyze sentiment and write a luxury response. JSON { sentiment, response }" 
                 }, { role: "user", content: `Review: "${reviewText}", Rating: ${rating}/5` }],
                 response_format: { type: "json_object" }
             });
             return res.status(200).json({ success: true, ...JSON.parse(completion.choices[0].message.content) });
         }
-
-        res.status(200).json({
-            success: true,
-            sentiment: rating >= 4 ? "Positive" : "Neutral/Negative",
-            response: "Thank you for your visit to Celine Esthetique. We appreciate your feedback.",
-            mode: "Mock Mode"
-        });
+        res.status(200).json({ success: true, sentiment: rating >= 4 ? "Positive" : "Neutral", response: "Thank you for your feedback!", mode: "Mock" });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -76,14 +92,8 @@ exports.analyzeSentiment = async (req, res) => {
 // --- 3. AI Skin Analyzer (Requirement 47) ---
 exports.analyzeSkin = async (req, res) => {
     try {
-        const skinAnalysis = {
-            skinType: "Combination",
-            confidence: 87,
-            concerns: ["slight redness", "dry cheeks"],
-            recommendedTreatments: ["Hydrating facial", "Gentle exfoliation"],
-            recommendedProducts: ["Calming serum", "Celine Moisturizer"]
-        };
-        res.status(200).json({ success: true, analysis: skinAnalysis, message: "Analysis Complete" });
+        const skinAnalysis = { skinType: "Combination", confidence: 87, recommendedTreatments: ["Hydrating facial"] };
+        res.status(200).json({ success: true, analysis: skinAnalysis });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -92,13 +102,9 @@ exports.analyzeSkin = async (req, res) => {
 // --- 4. AI Service Recommender (Requirement 49) ---
 exports.recommendService = async (req, res) => {
     try {
-        const { skinConcern, area, occasion } = req.body;
-        let recommendation = area === "nails" ? "Gel Semi-permanent" : "Hydrafacial + Head Spa";
-        res.status(200).json({
-            success: true,
-            recommendedService: recommendation,
-            reason: `Perfect for your ${skinConcern} and ${occasion}.`
-        });
+        const { area } = req.body;
+        let recommendation = area === "nails" ? "Gel Semi-permanent" : "Head Spa";
+        res.status(200).json({ success: true, recommendedService: recommendation });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -108,14 +114,8 @@ exports.recommendService = async (req, res) => {
 exports.estimatePrice = async (req, res) => {
     try {
         const { serviceName, addOns = [] } = req.body;
-        const base = serviceName === "Head Spa" ? 120 : 50;
-        const total = base + (addOns.length * 25);
-        res.status(200).json({
-            success: true,
-            service: serviceName,
-            estimatedTotal: `CHF ${total}`,
-            currency: "CHF"
-        });
+        const total = (serviceName === "Head Spa" ? 120 : 50) + (addOns.length * 25);
+        res.status(200).json({ success: true, estimatedTotal: `CHF ${total}` });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -124,20 +124,19 @@ exports.estimatePrice = async (req, res) => {
 // --- 6. AI Nail Design Generator (Requirement 48) ---
 exports.generateNailDesign = async (req, res) => {
     try {
-        const { color, style, occasion } = req.body;
-        res.status(200).json({
-            success: true,
-            imageUrl: "https://example.com/ai-nails.jpg",
-            prompt: `Luxury ${style} nails in ${color} for ${occasion}`,
-            designName: "Celine Royal Elegance"
-        });
+        res.status(200).json({ success: true, imageUrl: "https://example.com/ai-nails.jpg", designName: "Celine Elegance" });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 };
 
-// --- 7. Reminder System Simulation (Requirement 53) ---
+// --- 7. Reminder System (Requirement 53) ---
 exports.sendReminder = async (req, res) => {
-    const { clientName } = req.body;
-    res.status(200).json({ success: true, message: `Reminder system active for ${clientName}` });
+    try {
+        const { clientName, email } = req.body;
+        console.log(`🤖 Auto-Reminder triggered for ${clientName}`);
+        res.status(200).json({ success: true, message: `Reminder system active for ${clientName}` });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 };
