@@ -1,9 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const aiController = require('../controllers/aiController');
-const reminderController = require('../controllers/reminderController');
 
-// AI Features
+// All endpoints now point to aiController
 router.post('/aftercare', aiController.getAftercare);
 router.post('/analyze-review', aiController.analyzeSentiment);
 router.post('/skin-analyze', aiController.analyzeSkin);
@@ -11,8 +10,9 @@ router.post('/recommend-service', aiController.recommendService);
 router.post('/price-estimate', aiController.estimatePrice);
 router.post('/generate-nail-design', aiController.generateNailDesign);
 
-// Reminder Features
-router.post('/schedule-reminder', reminderController.scheduleReminder); // Check this function exists
-router.get('/auto-check', reminderController.checkDueReminders);      // Check this function exists
+// Reminders
+router.post('/schedule-reminder', aiController.scheduleReminder);
+router.get('/auto-check', aiController.checkDueReminders);
+router.post('/send-reminder', aiController.sendReminder);
 
 module.exports = router;
