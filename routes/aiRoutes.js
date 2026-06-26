@@ -15,4 +15,8 @@ router.post('/schedule-reminder', aiController.scheduleReminder);
 router.get('/auto-check', aiController.checkDueReminders);
 router.post('/send-reminder', aiController.sendReminder);
 
+// Day 8 Advanced Content & Marketing
+router.post('/generate-blog', aiController.generateBlog);
+router.post('/generate-promo', aiController.generatePromo);
+router.post('/detect-intent', aiController.detectIntent);
 module.exports = router;
